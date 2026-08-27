@@ -1,6 +1,21 @@
 # Task API
 
-An Express CRUD API for managing tasks.
+An Express CRUD API for managing tasks, SQLite for backend database.
+
+## Why SQLite?
+
+SQLite was chosen because it is a real SQL database that still fits a small local project:
+
+- No separate database server to install or run — just a library (`better-sqlite3`) and a file
+- Data survives server restarts 
+- Synchronous API, which keeps the Express handlers simple (no `async`/`await` for queries)
+- Enough SQL to practice `SELECT`, `INSERT`, `UPDATE`, and `DELETE` without the overhead of Postgres or MySQL
+
+## Database file
+
+Tasks are stored in **`tasks.db`** in the project root (the same folder as `index.js`).
+
+The file is created automatically the first time the app starts. It is listed in `.gitignore`, so each machine keeps its own copy.
 
 ## Getting started
 
@@ -24,6 +39,16 @@ npm start
 The API runs at `http://localhost:3000`.
 
 OpenAPI docs (Swagger UI) are at [http://localhost:3000/docs](http://localhost:3000/docs). The spec lives in `openapi.json`.
+
+### Example SQL query
+
+On startup, the app runs queries like this to read every row:
+
+```sql
+SELECT id, title, done FROM tasks ORDER BY id;
+```
+
+That is the same data you get from `GET /tasks`.
 
 ## Endpoints
 
