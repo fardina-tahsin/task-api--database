@@ -17,6 +17,8 @@ Tasks are stored in **`tasks.db`** in the project root (the same folder as `inde
 
 The file is created automatically the first time the app starts. It is listed in `.gitignore`, so each machine keeps its own copy.
 
+<img width="1156" height="290" alt="database" src="https://github.com/user-attachments/assets/d0812492-aa20-427e-8fc7-32c77c6f36fe" />
+
 ## Getting started
 
 Install dependencies:
