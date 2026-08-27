@@ -45,10 +45,10 @@ OpenAPI docs (Swagger UI) are at [http://localhost:3000/docs](http://localhost:3
 On startup, the app runs queries like this to read every row:
 
 ```sql
-SELECT id, title, done FROM tasks ORDER BY id;
+SELECT id, title, done, created_at, updated_at FROM tasks ORDER BY id;
 ```
 
-That is the same data you get from `GET /tasks`.
+That is the same data you get from `GET /tasks`. Each task also stores `created_at` and `updated_at` (set on insert; `updated_at` is refreshed on every successful `PUT`).
 
 ## Endpoints
 
@@ -107,9 +107,27 @@ Filters can be combined: `?done=false&search=book`
 
 ```json
 [
-  { "id": 1, "title": "Buy a book", "done": true },
-  { "id": 2, "title": "Go on a morning walk", "done": true },
-  { "id": 3, "title": "Go to market", "done": false }
+  {
+    "id": 1,
+    "title": "Buy a book",
+    "done": true,
+    "created_at": "2026-08-27 13:38:30",
+    "updated_at": "2026-08-27 13:38:30"
+  },
+  {
+    "id": 2,
+    "title": "Go on a morning walk",
+    "done": true,
+    "created_at": "2026-08-27 13:38:30",
+    "updated_at": "2026-08-27 13:38:30"
+  },
+  {
+    "id": 3,
+    "title": "Go to market",
+    "done": false,
+    "created_at": "2026-08-27 13:40:00",
+    "updated_at": "2026-08-27 13:40:00"
+  }
 ]
 ```
 
@@ -123,7 +141,7 @@ curl "http://localhost:3000/tasks?search=milk"
 
 ### `GET /stats`
 
-Returns computed counts for the current task list.
+Returns counts computed in SQL with `COUNT()` (not by looping in JavaScript).
 
 **Response**
 
@@ -140,14 +158,33 @@ curl http://localhost:3000/stats
 ### `POST /reset`
 
 Restores the three seed example tasks. Useful for demos and testing.
+Clears the database and restores the three seed example tasks.
 
 **Response (200)**
 
 ```json
 [
-  { "id": 1, "title": "Buy a book", "done": true },
-  { "id": 2, "title": "Go on a morning walk", "done": true },
-  { "id": 3, "title": "Go to market", "done": false }
+  {
+    "id": 1,
+    "title": "Buy a book",
+    "done": true,
+    "created_at": "2026-08-27 13:38:30",
+    "updated_at": "2026-08-27 13:38:30"
+  },
+  {
+    "id": 2,
+    "title": "Go on a morning walk",
+    "done": true,
+    "created_at": "2026-08-27 13:38:30",
+    "updated_at": "2026-08-27 13:38:30"
+  },
+  {
+    "id": 3,
+    "title": "Go to market",
+    "done": false,
+    "created_at": "2026-08-27 13:40:00",
+    "updated_at": "2026-08-27 13:40:00"
+  }
 ]
 ```
 
@@ -164,7 +201,7 @@ Returns a single task by id.
 **Response (200)**
 
 ```json
-{ "id": 1, "title": "Buy a book", "done": true }
+{ "id": 1, "title": "Buy a book", "done": true, "created_at": "2026-08-27 13:38:30", "updated_at": "2026-08-27 13:38:30" }
 ```
 
 **Response (404)**
@@ -192,7 +229,7 @@ Creates a new task.
 **Response (201)**
 
 ```json
-{ "id": 4, "title": "Buy milk", "done": false }
+{ "id": 4, "title": "Buy milk", "done": false, "created_at": "2026-08-27 13:45:00", "updated_at": "2026-08-27 13:45:00" }
 ```
 
 **Response (400)**
@@ -219,7 +256,7 @@ Updates a task's `title` and/or `done`. Send one or both fields; omitted fields 
 **Response (200)**
 
 ```json
-{ "id": 1, "title": "Buy oat milk", "done": true }
+{ "id": 1, "title": "Buy oat milk", "done": true, "created_at": "2026-08-27 13:46:30", "updated_at": "2026-08-27 13:46:30" }
 ```
 
 **Response (400)**

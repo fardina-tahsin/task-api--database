@@ -3,7 +3,7 @@
   "info": {
     "title": "Task API",
     "version": "1.0",
-    "description": "CRUD API for tasks"
+    "description": "SQLite based CRUD API for tasks"
   },
   "servers": [
     {
@@ -275,7 +275,7 @@
     "schemas": {
       "Task": {
         "type": "object",
-        "required": ["id", "title", "done"],
+        "required": ["id", "title", "done", "created_at", "updated_at"],
         "properties": {
           "id": {
             "type": "integer",
@@ -288,6 +288,14 @@
           "done": {
             "type": "boolean",
             "example": true
+          },
+          "created_at": {
+            "type": "string",
+            "example": "2026-08-27 13:38:30"
+          },
+          "updated_at": {
+            "type": "string",
+            "example": "2026-08-27 13:38:30"
           }
         }
       },

@@ -15,9 +15,22 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS tasks (
     id INTEGER PRIMARY KEY,
     title TEXT NOT NULL,
-    done INTEGER NOT NULL DEFAULT 0
+    done INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   )
 `);
+
+const taskColumns = db.prepare('PRAGMA table_info(tasks)').all().map((c) => c.name);
+
+if (!taskColumns.includes('created_at')) {
+  db.exec(`ALTER TABLE tasks ADD COLUMN created_at TEXT NOT NULL DEFAULT ''`);
+  db.exec(`UPDATE tasks SET created_at = datetime('now') WHERE created_at = ''`);
+}
+if (!taskColumns.includes('updated_at')) {
+  db.exec(`ALTER TABLE tasks ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''`);
+  db.exec(`UPDATE tasks SET updated_at = datetime('now') WHERE updated_at = ''`);
+}
 
 // Original demo data - POST /reset restores a fresh copy of this list.
 const SEED_TASKS = [
@@ -26,24 +39,27 @@ const SEED_TASKS = [
     { id: 3, title: 'Go to market', done: false },
 ];
 
+const insertSeedTask = db.prepare('INSERT INTO tasks (id, title, done) VALUES (?, ?, ?)');
+
+function seedTasks(tasks) {
+  for (const task of tasks) {
+    insertSeedTask.run(task.id, task.title, task.done ? 1 : 0);
+  }
+}
+
 // Seed only when empty, so restarting the server won't duplicate rows.
 const countTasks = db.prepare('SELECT COUNT(*) AS count FROM tasks');
 if (countTasks.get().count === 0) {
-  const insert = db.prepare('INSERT INTO tasks (id, title, done) VALUES (?, ?, ?)');
-  
-  const seed = db.transaction((tasks) => {
-    for (const task of tasks) {
-      insert.run(task.id, task.title, task.done ? 1 : 0);
-    }
-  });
-  seed(SEED_TASKS);
+  db.transaction(seedTasks)(SEED_TASKS);
 }
 
-const tasks = SEED_TASKS.map((task) => ({ ...task }));
-
 function resetTasks() {
-  tasks.length = 0;
-  tasks.push(...SEED_TASKS.map((task) => ({ ...task })));
+  const clear = db.prepare('DELETE FROM tasks');
+  const reset = db.transaction((tasks) => {
+    clear.run();
+    seedTasks(tasks);
+  });
+  reset(SEED_TASKS);
 }
 
 // OpenAPI spec - interactive docs at /docs.
@@ -65,12 +81,20 @@ app.get('/health', (req, res) => {
 
 // Convert a SQLite row (done is 0/1) into the JSON shape the API already returns.
 function rowToTask(row) {
-  return { id: row.id, title: row.title, done: Boolean(row.done) };
+  return {
+    id: row.id,
+    title: row.title,
+    done: Boolean(row.done),
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
 }
+
+const TASK_COLUMNS = 'id, title, done, created_at, updated_at';
 
 // Query params after ? filter the list - they are not part of the address.
 app.get('/tasks', (req, res) => {
-  let sql = 'SELECT id, title, done FROM tasks WHERE 1=1';
+  let sql = `SELECT ${TASK_COLUMNS} FROM tasks WHERE 1=1`;
   const params = [];
 
   if (req.query.done !== undefined) {
@@ -100,18 +124,25 @@ app.get('/tasks', (req, res) => {
 
 // Derived counts - the server computes, not just stores.
 app.get('/stats', (req, res) => {
-  const done = tasks.filter((t) => t.done).length;
-  res.json({
-    total: tasks.length,
-    done,
-    open: tasks.length - done,
-  });
+  const stats = db.prepare(
+      `
+      SELECT
+        COUNT(*) AS total,
+        COUNT(CASE WHEN done = 1 THEN 1 END) AS done,
+        COUNT(CASE WHEN done = 0 THEN 1 END) AS open
+      FROM tasks
+    `
+    )
+    .get();
+
+  res.json(stats);
 });
 
 // Restore the seed tasks
 app.post('/reset', (req, res) => {
   resetTasks();
-  res.json(tasks);
+  const rows = db.prepare(`SELECT ${TASK_COLUMNS} FROM tasks ORDER BY id`).all();
+  res.json(rows.map(rowToTask));
 });
 
 // Create a task
@@ -125,14 +156,14 @@ app.post('/tasks', (req, res) => {
   // Insert a new row
   const result = db.prepare('INSERT INTO tasks (title, done) VALUES (?, 0)').run(String(title).trim());
 
-  const row = db.prepare('SELECT id, title, done FROM tasks WHERE id = ?').get(result.lastInsertRowid);
+  const row = db.prepare(`SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ?`).get(result.lastInsertRowid);
 
   res.status(201).json(rowToTask(row));
 });
 
 app.get('/tasks/:id', (req, res) => {
   const id = Number(req.params.id);
-  const row = db.prepare('SELECT id, title, done FROM tasks WHERE id = ?').get(id);
+  const row = db.prepare(`SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ?`).get(id);
 
   if (!row) {
     return res.status(404).json({ error: `Task ${id} is not found` });
@@ -143,7 +174,8 @@ app.get('/tasks/:id', (req, res) => {
 
 // Update an existing task
 app.put('/tasks/:id', (req, res) => {
-  const row = db.prepare('SELECT id, title, done FROM tasks WHERE id = ?').get(id);
+  const id = Number(req.params.id);
+  const row = db.prepare(`SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ?`).get(id);
 
   if (!row) {
     return res.status(404).json({ error: `Task ${id} not found` });
@@ -175,13 +207,12 @@ app.put('/tasks/:id', (req, res) => {
     nextDone = done ? 1 : 0;
   }
 
-  db.prepare('UPDATE tasks SET title = ?, done = ? WHERE id = ?').run(
-    nextTitle,
-    nextDone,
-    id
-  );
+  db.prepare(
+    `UPDATE tasks SET title = ?, done = ?, updated_at = datetime('now') WHERE id = ?`
+  ).run(nextTitle, nextDone, id);
 
-  res.json(rowToTask({ id, title: nextTitle, done: nextDone }));
+  const updated = db.prepare(`SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ?`).get(id);
+  res.json(rowToTask(updated));
 });
 
 // Remove a task
