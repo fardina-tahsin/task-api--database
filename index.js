@@ -1,4 +1,5 @@
 const express = require('express');
+const Database = require('better-sqlite3'); 
 const swaggerUi = require('swagger-ui-express');
 const openapi = require('./openapi.json');
 const app = express();
@@ -7,6 +8,17 @@ const PORT = 3000;
 // Parse JSON request bodies
 app.use(express.json());
 
+const db = new Database('tasks.db');
+
+// SQLite has no real boolean type, so done is stored as 0/1 (INTEGER)
+db.exec(`
+  CREATE TABLE IF NOT EXISTS tasks (
+    id INTEGER PRIMARY KEY,
+    title TEXT NOT NULL,
+    done INTEGER NOT NULL DEFAULT 0
+  )
+`);
+
 // Original demo data - POST /reset restores a fresh copy of this list.
 const SEED_TASKS = [
     { id: 1, title: 'Buy a book', done: true },
@@ -14,7 +26,19 @@ const SEED_TASKS = [
     { id: 3, title: 'Go to market', done: false },
 ];
 
-// In-memory task store
+// Seed only when empty, so restarting the server won't duplicate rows.
+const countTasks = db.prepare('SELECT COUNT(*) AS count FROM tasks');
+if (countTasks.get().count === 0) {
+  const insert = db.prepare('INSERT INTO tasks (id, title, done) VALUES (?, ?, ?)');
+  
+  const seed = db.transaction((tasks) => {
+    for (const task of tasks) {
+      insert.run(task.id, task.title, task.done ? 1 : 0);
+    }
+  });
+  seed(SEED_TASKS);
+}
+
 const tasks = SEED_TASKS.map((task) => ({ ...task }));
 
 function resetTasks() {
