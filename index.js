@@ -63,16 +63,23 @@ app.get('/health', (req, res) => {
   res.json({status: 'OK' });
 });
 
+// Convert a SQLite row (done is 0/1) into the JSON shape the API already returns.
+function rowToTask(row) {
+  return { id: row.id, title: row.title, done: Boolean(row.done) };
+}
+
 // Query params after ? filter the list - they are not part of the address.
 app.get('/tasks', (req, res) => {
-  let result = tasks;
+  let sql = 'SELECT id, title, done FROM tasks WHERE 1=1';
+  const params = [];
 
   if (req.query.done !== undefined) {
     if (req.query.done !== 'true' && req.query.done !== 'false') {
       return res.status(400).json({ error: 'done must be true or false' });
     }
-    const done = req.query.done === 'true';
-    result = result.filter((t) => t.done === done);
+
+    sql += ' AND done = ?';
+    params.push(req.query.done === 'true' ? 1 : 0);
   }
 
   if (req.query.search !== undefined) {
@@ -82,11 +89,13 @@ app.get('/tasks', (req, res) => {
       return res.status(400).json({ error: 'search must not be empty' });
     }
 
-    const lower = word.toLowerCase();
-    result = result.filter((t) => t.title.toLowerCase().includes(lower));
+    sql += ' AND LOWER(title) LIKE ?';
+    params.push(`%${word.toLowerCase()}%`);
   }
 
-  res.json(result);
+  sql += ' ORDER BY id';
+  const rows = db.prepare(sql).all(...params);
+  res.json(rows.map(rowToTask));
 });
 
 // Derived counts - the server computes, not just stores.
@@ -122,13 +131,13 @@ app.post('/tasks', (req, res) => {
 
 app.get('/tasks/:id', (req, res) => {
   const id = Number(req.params.id);
-  const task = tasks.find((t) => t.id === id);
+  const row = db.prepare('SELECT id, title, done FROM tasks WHERE id = ?').get(id);
 
-  if (!task) {
+  if (!row) {
     return res.status(404).json({ error: `Task ${id} is not found` });
   }
 
-  res.json(task);
+  res.json(rowToTask(row));
 });
 
 // Update an existing task
